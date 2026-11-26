@@ -35,9 +35,9 @@ jobs:
       - name: Checkout builder repository
         uses: actions/checkout@v4
 
-      - name: Maximize runner disk space
+      - name: Maximize runner disk space and install dependencies
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/.ghcup
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
@@ -72,7 +72,7 @@ jobs:
         run: |
           chmod +x .github/scripts/prepare_fanchmwrt.sh
           if [ "${{ inputs.apply_led_patch }}" = "false" ]; then
-            ./.github/scripts/prepare_fanchmwrt.sh /workdir/fanchmwrt configs/bt-r320.diffconfig --no-patch
+            ./.github/scripts/prepare_fanchmwrt.sh /workdir/fanchmwrt configs/bt-r320.diffconfig --no-led-patch
           else
             ./.github/scripts/prepare_fanchmwrt.sh /workdir/fanchmwrt configs/bt-r320.diffconfig
           fi
@@ -81,7 +81,7 @@ jobs:
         working-directory: /workdir/fanchmwrt
         run: |
           make defconfig
-          grep -E "CONFIG_TARGET_mediatek_filogic_DEVICE_globitel_bt-r320|CONFIG_PACKAGE_luci-app-dockerman|CONFIG_PACKAGE_luci-app-samba4" .config
+          grep -E "CONFIG_TARGET_mediatek_filogic_DEVICE_globitel_bt-r320=y|CONFIG_PACKAGE_luci-app-dockerman=y|CONFIG_PACKAGE_luci-app-samba4=y" .config
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
@@ -122,9 +122,10 @@ jobs:
           name: "FanchmWrt BT-R320 (${{ inputs.fanchmwrt_branch || 'fanchmwrt-25.12.6' }}) - ${{ env.BUILD_DATE }}"
           body: |
             - **Device**: Globitel BT-R320 (MT7981B / 1GB DDR4 / eMMC)
+            - **Partition Mode**: Legacy eMMC `kernel` + `rootfs` (`sysupgrade.bin`, keeps existing GPT & WebUI U-Boot intact)
             - **Upstream**: `fanchmwrt/fanchmwrt` @ `${{ inputs.fanchmwrt_branch || 'fanchmwrt-25.12.6' }}` (`${{ env.UPSTREAM_SHA }}`)
             - **LED Patch (GPIO 10/11/12)**: `${{ inputs.apply_led_patch }}`
-            - **Extra Packages**: USB Storage (`exfat`/`ntfs3`/`hd-idle`), `samba4`, `docker` + `dockerman`, `ttyd`, `zh-cn`
+            - **Extra Packages**: USB Storage (`exfat`/`ntfs3`/`f2fs`/`hd-idle`), `samba4`, `docker` + `dockerman`, `ttyd`, `zh-cn`
 
-            > ⚠️ **首次从 237 固件或原厂固件刷入时，请先完整备份 `factory` / `bl2` / `fip` 分区，并严格按 `docs/03_刷机备份与救砖回滚指南.md` 先更新 `gpt.bin` 与 `bl31-uboot.fip`，切勿直接强刷 `sysupgrade.itb`！**
+            > ℹ️ 本固件保持现有 `u-boot-env`/`factory`/`fip`/`userdata`/`primary` 分区及 WebUI U-Boot 不变，在备份 `factory` 后可通过 WebUI U-Boot 直接刷入 `*-squashfs-sysupgrade.bin`。
           files: ${{ env.OUT_DIR }}/*
