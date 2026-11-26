@@ -1,0 +1,38 @@
+--- a/target/linux/mediatek/dts/mt7981b-globitel-bt-r320.dts
++++ b/target/linux/mediatek/dts/mt7981b-globitel-bt-r320.dts
+@@ -14,6 +14,10 @@
+ 	aliases {
+ 		serial0 = &uart0;
+ 		label-mac-device = &gmac0;
++		led-boot = &status_red_led;
++		led-failsafe = &status_red_led;
++		led-running = &status_green_led;
++		led-upgrade = &status_blue_led;
+ 	};
+ 
+ 	chosen {
+@@ -69,6 +73,24 @@
+ 			gpios = <&pio 35 GPIO_ACTIVE_LOW>;
+ 			linux,default-trigger = "phy1tpt";
+ 		};
++
++		status_red_led: led-2 {
++			function = LED_FUNCTION_STATUS;
++			color = <LED_COLOR_ID_RED>;
++			gpios = <&pio 10 GPIO_ACTIVE_LOW>;
++		};
++
++		status_green_led: led-3 {
++			function = LED_FUNCTION_STATUS;
++			color = <LED_COLOR_ID_GREEN>;
++			gpios = <&pio 11 GPIO_ACTIVE_LOW>;
++		};
++
++		status_blue_led: led-4 {
++			function = LED_FUNCTION_STATUS;
++			color = <LED_COLOR_ID_BLUE>;
++			gpios = <&pio 12 GPIO_ACTIVE_LOW>;
++		};
+ 	};
+ };
+ 

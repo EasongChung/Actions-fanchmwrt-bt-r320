@@ -1,0 +1,130 @@
+name: Build FanchmWrt for Globitel BT-R320
+
+on:
+  workflow_dispatch:
+    inputs:
+      fanchmwrt_branch:
+        description: 'FanchmWrt upstream branch'
+        required: true
+        default: 'fanchmwrt-25.12.6'
+        type: string
+      apply_led_patch:
+        description: 'Apply GPIO 10/11/12 RGB status LED patch'
+        required: true
+        default: true
+        type: boolean
+      upload_release:
+        description: 'Publish artifacts to GitHub Release'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: https://github.com/fanchmwrt/fanchmwrt.git
+  TZ: Asia/Shanghai
+  TARGET_PROFILE: globitel_bt-r320
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout builder repository
+        uses: actions/checkout@v4
+
+      - name: Maximize runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex g++ gawk \
+            gcc-multilib g++-multilib gettext git gperf haveged help2man intltool lib32gcc-s1 \
+            libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libncursesw5-dev libpython3-dev libreadline-dev \
+            libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch \
+            pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools \
+            qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+            upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+          sudo apt-get autoremove -y -qq
+          sudo apt-get clean
+          sudo timedatectl set-timezone "$TZ"
+          df -hT
+
+      - name: Clone FanchmWrt source
+        run: |
+          sudo mkdir -p /workdir
+          sudo chown "$USER:$GROUPS" /workdir
+          git clone --depth=1 -b "${{ inputs.fanchmwrt_branch || 'fanchmwrt-25.12.6' }}" \
+            "$UPSTREAM_REPO" /workdir/fanchmwrt
+          echo "UPSTREAM_SHA=$(git -C /workdir/fanchmwrt rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Update and install feeds
+        working-directory: /workdir/fanchmwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Prepare patches and config
+        run: |
+          chmod +x .github/scripts/prepare_fanchmwrt.sh
+          if [ "${{ inputs.apply_led_patch }}" = "false" ]; then
+            ./.github/scripts/prepare_fanchmwrt.sh /workdir/fanchmwrt configs/bt-r320.diffconfig --no-patch
+          else
+            ./.github/scripts/prepare_fanchmwrt.sh /workdir/fanchmwrt configs/bt-r320.diffconfig
+          fi
+
+      - name: Expand config and download sources
+        working-directory: /workdir/fanchmwrt
+        run: |
+          make defconfig
+          grep -E "CONFIG_TARGET_mediatek_filogic_DEVICE_globitel_bt-r320|CONFIG_PACKAGE_luci-app-dockerman|CONFIG_PACKAGE_luci-app-samba4" .config
+          make download -j8
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: Compile FanchmWrt firmware
+        working-directory: /workdir/fanchmwrt
+        run: |
+          export LANG=en_US.UTF-8
+          export LC_ALL=en_US.UTF-8
+          make -j"$(nproc)" || make -j1 V=s
+
+      - name: Collect BT-R320 firmware artifacts
+        id: collect
+        working-directory: /workdir/fanchmwrt
+        run: |
+          OUT_DIR="/workdir/output"
+          mkdir -p "$OUT_DIR"
+          BIN_DIR="bin/targets/mediatek/filogic"
+          ls -la "$BIN_DIR"
+          cp -f "$BIN_DIR"/*globitel_bt-r320* "$OUT_DIR"/
+          (cd "$OUT_DIR" && sha256sum * > sha256sums.txt)
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date +'%Y%m%d-%H%M')" >> "$GITHUB_ENV"
+          ls -lh "$OUT_DIR"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fanchmwrt-bt-r320-${{ env.BUILD_DATE }}
+          path: ${{ env.OUT_DIR }}
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.upload_release == true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "bt-r320-${{ env.BUILD_DATE }}"
+          name: "FanchmWrt BT-R320 (${{ inputs.fanchmwrt_branch || 'fanchmwrt-25.12.6' }}) - ${{ env.BUILD_DATE }}"
+          body: |
+            - **Device**: Globitel BT-R320 (MT7981B / 1GB DDR4 / eMMC)
+            - **Upstream**: `fanchmwrt/fanchmwrt` @ `${{ inputs.fanchmwrt_branch || 'fanchmwrt-25.12.6' }}` (`${{ env.UPSTREAM_SHA }}`)
+            - **LED Patch (GPIO 10/11/12)**: `${{ inputs.apply_led_patch }}`
+            - **Extra Packages**: USB Storage (`exfat`/`ntfs3`/`hd-idle`), `samba4`, `docker` + `dockerman`, `ttyd`, `zh-cn`
+
+            > ⚠️ **首次从 237 固件或原厂固件刷入时，请先完整备份 `factory` / `bl2` / `fip` 分区，并严格按 `docs/03_刷机备份与救砖回滚指南.md` 先更新 `gpt.bin` 与 `bl31-uboot.fip`，切勿直接强刷 `sysupgrade.itb`！**
+          files: ${{ env.OUT_DIR }}/*
