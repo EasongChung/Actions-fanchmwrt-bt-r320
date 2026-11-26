@@ -127,5 +127,5 @@ jobs:
             - **LED Patch (GPIO 10/11/12)**: `${{ inputs.apply_led_patch }}`
             - **Extra Packages**: USB Storage (`exfat`/`ntfs3`/`f2fs`/`hd-idle`), `samba4`, `docker` + `dockerman`, `ttyd`, `zh-cn`
 
-            > ℹ️ 本固件保持现有 `u-boot-env`/`factory`/`fip`/`userdata`/`primary` 分区及 WebUI U-Boot 不变，在备份 `factory` 后可通过 WebUI U-Boot 直接刷入 `*-squashfs-sysupgrade.bin`。
+            > 注意：本镜像采用传统 eMMC `kernel` + `rootfs` 布局（`sysupgrade.bin`），不改写现有 GPT 分区表与既有 U-Boot。首次从其他底包迁移前请备份 `factory` 分区，并通过 WebUI U-Boot 或 `sysupgrade -n` 刷入。
           files: ${{ env.OUT_DIR }}/*
