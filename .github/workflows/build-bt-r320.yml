@@ -113,7 +113,7 @@ jobs:
             echo "=== Related entries in .config ==="
             grep -E "CONFIG_PACKAGE_(luci-app-store|luci-compat|luci-lib-taskd|luci-lib-xterm|luci-lua-runtime|taskd|script-utils|coreutils-stty|mount-utils|libuci-lua|curl|tar)[= ]" .config || true
             echo "=== Package definitions in tmp/.config-package.in ==="
-            awk '/^config PACKAGE_(luci-app-store|luci-compat|luci-lib-taskd|luci-lua-runtime|taskd)$/{flag=1} flag{print} /^$/{if(flag){flag=0; print "---"}}' tmp/.config-package.in || true
+            awk '/^[[:space:]]*(menu)?config PACKAGE_(luci-app-store|luci-compat|luci-lib-taskd|luci-lua-runtime|taskd|tar|xz|xz-utils)$/{flag=1} flag{print} /^[[:space:]]*$/{if(flag){flag=0; print "---"}}' tmp/.config-package.in || true
             exit 1
           fi
           make download -j8
