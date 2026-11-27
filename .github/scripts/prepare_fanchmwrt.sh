@@ -4,9 +4,32 @@ set -euo pipefail
 # 准备 FanchmWrt 编译目录：应用补丁、注入 diffconfig 与自定义 files
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-OPENWRT_DIR="${1:?Usage: $0 <openwrt_source_dir> [diffconfig] [--no-led-patch]}"
-CONFIG_FILE="${2:-${REPO_ROOT}/configs/bt-r320.diffconfig}"
-PATCH_MODE="${3:-}"
+OPENWRT_DIR="${1:?Usage: $0 <openwrt_source_dir> [diffconfig] [--no-led-patch] [--no-istore]}"
+shift
+
+CONFIG_FILE="${REPO_ROOT}/configs/bt-r320.diffconfig"
+SKIP_LED_PATCH=0
+SKIP_ISTORE=0
+
+if [ "${#}" -gt 0 ] && [[ "${1}" != --* ]]; then
+  CONFIG_FILE="${1}"
+  shift
+fi
+
+for arg in "$@"; do
+  case "${arg}" in
+    --no-led-patch)
+      SKIP_LED_PATCH=1
+      ;;
+    --no-istore)
+      SKIP_ISTORE=1
+      ;;
+    *)
+      echo "ERROR: Unknown option: ${arg}" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [ ! -d "${OPENWRT_DIR}" ]; then
   echo "ERROR: OpenWrt source directory not found: ${OPENWRT_DIR}" >&2
@@ -23,7 +46,7 @@ if [ -d "${REPO_ROOT}/patches" ]; then
   shopt -s nullglob
   for patch_file in "${REPO_ROOT}"/patches/*.patch; do
     patch_name="$(basename "${patch_file}")"
-    if [ "${PATCH_MODE}" = "--no-led-patch" ] && [[ "${patch_name}" == *add-status-leds* ]]; then
+    if [ "${SKIP_LED_PATCH}" -eq 1 ] && [[ "${patch_name}" == *add-status-leds* ]]; then
       echo "Skipping optional LED patch: ${patch_name}"
       continue
     fi
@@ -45,5 +68,10 @@ fi
 
 echo "==> Copying diffconfig to .config ..."
 cp -f "${CONFIG_FILE}" "${OPENWRT_DIR}/.config"
+
+if [ "${SKIP_ISTORE}" -eq 1 ]; then
+  echo "==> Disabling iStore entries in .config ..."
+  sed -i '/^CONFIG_PACKAGE_luci-app-store=/d;/^CONFIG_PACKAGE_luci-compat=/d' "${OPENWRT_DIR}/.config"
+fi
 
 echo "==> Preparation completed."

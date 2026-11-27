@@ -41,6 +41,7 @@ Actions-fanchmwrt-bt-r320/
   - USB 存储与文件系统：`usbutils`、`lsblk`、`fdisk`、`blkid`、`kmod-usb-storage-uas`、`kmod-fs-exfat`、`kmod-fs-ntfs3`、`kmod-fs-f2fs`、`luci-app-hd-idle`。
   - 文件共享与容器：`luci-app-samba4`、`docker`、`dockerd`、`docker-compose`、`luci-app-dockerman`、`kmod-br-netfilter`、`kmod-veth`、`iptables-nft`、`ip6tables-nft`、`DOCKER_CGROUP_OPTIONS`、`DOCKER_NET_MACVLAN`、`DOCKER_STO_EXT4`。
   - 终端与本地化：`luci-app-ttyd` 及简体中文语言包。
+  - 应用商店：`luci-app-store`（iStore，来自 `linkease/istore`，含 `luci-compat` 及 OpenWrt 25.12 APK 适配）。
 
 ## 3. GitHub Actions 云构建
 
@@ -48,6 +49,7 @@ Actions-fanchmwrt-bt-r320/
 2. 构建参数：
    - `fanchmwrt_branch`：上游分支名，默认 `fanchmwrt-25.12.6`。
    - `apply_led_patch`：是否应用 GPIO 10/11/12 状态灯补丁，默认 `true`。
+   - `include_istore`：是否内置 iStore 应用商店，默认 `true`。
    - `upload_release`：是否发布至 GitHub Release，默认 `true`。
 3. 构建完成后，在 Workflow Artifacts 或 Release 页面获取 `*-globitel_bt-r320-squashfs-sysupgrade.bin`、`*-initramfs-recovery.itb` 及 `sha256sums.txt`。
 
@@ -59,12 +61,14 @@ git clone https://github.com/EasongChung/Actions-fanchmwrt-bt-r320.git
 cd Actions-fanchmwrt-bt-r320
 git clone --depth=1 -b fanchmwrt-25.12.6 https://github.com/fanchmwrt/fanchmwrt.git fanchmwrt-src
 
-# 2. 更新并安装 Feeds
+# 2. 添加 iStore 源并更新安装 Feeds（如不内置 iStore 可跳过第 1 行）
 cd fanchmwrt-src
+echo 'src-git istore https://github.com/linkease/istore;main' >> feeds.conf.default
 ./scripts/feeds update -a && ./scripts/feeds install -a
+./scripts/feeds install -p istore -d y luci-app-store
 cd ..
 
-# 3. 应用补丁与配置（如需跳过 002 状态灯补丁，在末尾追加 --no-led-patch）
+# 3. 应用补丁与配置（可选参数：--no-led-patch / --no-istore）
 chmod +x .github/scripts/prepare_fanchmwrt.sh
 ./.github/scripts/prepare_fanchmwrt.sh ./fanchmwrt-src ./configs/bt-r320.diffconfig
 
@@ -76,6 +80,8 @@ make -j"$(nproc)" || make -j1 V=s
 ```
 
 构建产物输出至 `fanchmwrt-src/bin/targets/mediatek/filogic/`。
+
+> 说明：iStore 商店内部分第三方插件面向原生 OpenWrt 构建，在包含自定义内核/加速模块的衍生固件上安装内核级组件（`kmod-*`）可能存在依赖差异，内核级扩展建议在编译阶段直接内置。
 
 ## 5. 分区映射与刷写说明
 
