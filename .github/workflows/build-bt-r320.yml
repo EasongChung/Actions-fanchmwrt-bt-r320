@@ -75,9 +75,6 @@ jobs:
           fi
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          if [ "${{ inputs.include_istore }}" != "false" ]; then
-            ./scripts/feeds install -p istore -d y luci-app-store
-          fi
 
       - name: Prepare patches and config
         run: |
@@ -91,15 +88,33 @@ jobs:
         working-directory: /workdir/fanchmwrt
         run: |
           make defconfig
-          for sym in \
-            CONFIG_TARGET_mediatek_filogic_DEVICE_globitel_bt-r320 \
-            CONFIG_PACKAGE_luci-app-dockerman \
-            CONFIG_PACKAGE_luci-app-samba4; do
-            grep -q "^${sym}=y$" .config
-          done
+          REQUIRED_SYMS=(
+            CONFIG_TARGET_mediatek_filogic_DEVICE_globitel_bt-r320
+            CONFIG_PACKAGE_luci-app-dockerman
+            CONFIG_PACKAGE_luci-app-samba4
+          )
           if [ "${{ inputs.include_istore }}" != "false" ]; then
-            grep -q "^CONFIG_PACKAGE_luci-app-store=y$" .config
-            grep -q "^CONFIG_PACKAGE_luci-compat=y$" .config
+            REQUIRED_SYMS+=(
+              CONFIG_PACKAGE_luci-app-store
+              CONFIG_PACKAGE_luci-compat
+            )
+          fi
+          FAILED=0
+          for sym in "${REQUIRED_SYMS[@]}"; do
+            if grep -q "^${sym}=y$" .config; then
+              echo "OK: ${sym}=y"
+            else
+              echo "MISSING/NOT_Y: ${sym}"
+              grep -E "^#? ?${sym}(=| )" .config || echo "  (not present in .config)"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -ne 0 ]; then
+            echo "=== Related entries in .config ==="
+            grep -E "CONFIG_PACKAGE_(luci-app-store|luci-compat|luci-lib-taskd|luci-lib-xterm|luci-lua-runtime|taskd|script-utils|coreutils-stty|mount-utils|libuci-lua|curl|tar)[= ]" .config || true
+            echo "=== Package definitions in tmp/.config-package.in ==="
+            awk '/^config PACKAGE_(luci-app-store|luci-compat|luci-lib-taskd|luci-lua-runtime|taskd)$/{flag=1} flag{print} /^$/{if(flag){flag=0; print "---"}}' tmp/.config-package.in || true
+            exit 1
           fi
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
